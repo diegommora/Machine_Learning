@@ -1,0 +1,94 @@
+---
+title: "Prediction Assignment Project"
+author: "Diego Mora"
+date: "6/13/2019"
+output: html_document
+---
+
+## Summary
+
+In this report we want to construct a model for predict the correct exceution of a particular excercise using the data of some sensors applied to 6 athletes. We are going to load and transform the data and then fit a random forest model.
+
+```{r, include=FALSE, echo=TRUE}
+library(dplyr)
+require(ggplot2)
+require(caret)
+require(randomForest)
+```
+## Load the Data
+
+```{r, cache=TRUE}
+urltraining <- c("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+urltesting <- c("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+
+download.file(urltraining,paste(getwd(),"/training.csv",sep = ""))
+download.file(urltesting,paste(getwd(),"/testing.csv",sep = ""))
+
+training <- read.csv("training.csv", na.strings = c("NA","","#DIV/0!"))
+testing <- read.csv("testing.csv", na.strings = c("NA","","#DIV/0!"))
+```
+
+```{r}
+plot(training$classe)
+```
+
+## Transform
+
+Select just the variables that have relevant data, it means the variables with less than 70% of NA values.
+
+```{r}
+training <- training %>% select(which(colMeans(is.na(.)) < 0.7))
+```
+
+As we don't want that our model depends on a particular participant we can take off the name variable, the time stamps and the "x" variable that is nothing more than the index.
+
+```{r}
+training <- training %>% select(6:60)
+```
+
+## Prediction Model
+
+Data Partition:
+```{r}
+set.seed(1919)
+inTrain <- createDataPartition(y=training$classe, p=0.7, list=FALSE)
+trainingMod <- training[inTrain,]
+testingMod <- training[-inTrain,]
+```
+
+First step is preprocessing the data using PCA and setting the threshold to find how many components we need. We want threshold or 95%, to find how many number of components are needed to capture the 95% of the variance. Note: we exclude the "classe" variable in the preprocess.
+
+```{r}
+preProc <- preProcess(trainingMod[,1:54],method = "pca",thresh = 0.95)
+preProc
+```
+
+Now we can use our preprocessing to set a new training data with our Principal Components
+
+```{r}
+trainPC <- predict(preProc, trainingMod[,1:54])
+```
+
+We can now fit a model, we want to use Random Forest
+
+```{r, cache=TRUE}
+modelFit <- randomForest(trainingMod$classe~.,data = trainPC)
+```
+
+Our PCA for the testing set and then the predictions. We can meassure our model with the confusion matrix.
+
+```{r, cache=TRUE}
+testPC <- predict(preProc,testingMod[,1:54])
+pred <- predict(modelFit,testPC)
+confusionMatrix(testingMod$classe,predict(modelFit,testPC))
+```
+
+## Conclusion
+
+This random forest model has a 97.5% of Accuracy with a 95% confidence interval of 97% to 97.9%. we need 25 Principal Components to describe the 95% of the variance of the data.
+
+## References
+
+The data used to this project was taken from:
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
